@@ -1,74 +1,94 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-  <meta charset="UTF-8" />
-  <title>ネスト対応 JSON to CSV</title>
+<meta charset="UTF-8" />
+<title>lab.js JSON to CSV</title>
 </head>
 <body>
-  <h1>ネスト対応 JSON to CSV 変換</h1>
-  <input type="file" id="jsonFile" accept=".json,.txt" />
-  <button id="convertBtn">変換してダウンロード</button>
+<h1>lab.js JSON → CSV変換ツール</h1>
+
+<label for="jsonFile">JSONファイルを選択：</label>
+<input type="file" id="jsonFile" accept=".json,.txt" />
+<button id="convertBtn" disabled>CSVに変換してダウンロード</button>
 
 <script>
-  document.getElementById('convertBtn').addEventListener('click', function() {
-    const fileInput = document.getElementById('jsonFile');
-    if (!fileInput.files.length) {
-      alert('JSONファイルを選択してください');
-      return;
-    }
-
-    const reader = new FileReader();
-    reader.onload = function (event) {
-      try {
-        const json = JSON.parse(event.target.result);
-        const items = Array.isArray(json) ? json : [json];
-        const flatItems = items.map(flattenObject);
-
-        const headers = [...new Set(flatItems.flatMap(obj => Object.keys(obj)))];
-        const rows = flatItems.map(obj =>
-          headers.map(header => JSON.stringify(obj[header] ?? "")).join(",")
-        );
-        const csv = [headers.join(","), ...rows].join("\n");
-
-        downloadCsv(csv);
-      } catch (error) {
-        alert('JSONの読み取りに失敗しました：' + error.message);
-        console.error(error);
-      }
-    };
-    reader.readAsText(fileInput.files[0]);
-  });
-
-  function flattenObject(obj, parentKey = '', result = {}) {
-    for (const [key, value] of Object.entries(obj)) {
-      const newKey = parentKey ? `${parentKey}.${key}` : key;
-      if (Array.isArray(value)) {
-        value.forEach((item, index) => {
-          if (typeof item === 'object' && item !== null) {
-            flattenObject(item, `${newKey}.${index}`, result);
-          } else {
-            result[`${newKey}.${index}`] = item;
-          }
-        });
-      } else if (typeof value === 'object' && value !== null) {
-        flattenObject(value, newKey, result);
+  // JSONフラット化（1階層ネスト展開）
+  function flatten(obj) {
+    const result = {};
+    for (const key in obj) {
+      if (typeof obj[key] === 'object' && obj[key] !== null && !Array.isArray(obj[key])) {
+        for (const subKey in obj[key]) {
+          result[`${key}.${subKey}`] = obj[key][subKey];
+        }
       } else {
-        result[newKey] = value;
+        result[key] = obj[key];
       }
     }
     return result;
   }
 
-  function downloadCsv(csv) {
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "converted.csv";
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
+  // CSV作成関数
+  function toCSV(data, keys) {
+    const lines = [];
+    lines.push(keys.join(',')); // header
+    data.forEach(row => {
+      const line = keys.map(k => {
+        const val = row[k] !== undefined ? row[k] : '';
+        const str = String(val).replace(/"/g, '""');
+        return `"${str}"`;
+      }).join(',');
+      lines.push(line);
+    });
+    return lines.join('\n');
   }
+
+  // ファイル選択・読み込み
+  const inputFile = document.getElementById('jsonFile');
+  const convertBtn = document.getElementById('convertBtn');
+  let jsonData = null;
+
+  inputFile.addEventListener('change', e => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        jsonData = JSON.parse(reader.result);
+        if (!Array.isArray(jsonData)) {
+          alert('JSONは配列である必要があります。');
+          jsonData = null;
+          convertBtn.disabled = true;
+          return;
+        }
+        convertBtn.disabled = false;
+      } catch {
+        alert('JSONの読み込みに失敗しました。');
+        jsonData = null;
+        convertBtn.disabled = true;
+      }
+    };
+    reader.readAsText(file, 'utf-8');
+  });
+
+  // 変換＆ダウンロード
+  convertBtn.addEventListener('click', () => {
+    if (!jsonData) return;
+
+    const flatData = jsonData.map(flatten);
+    const allKeys = new Set();
+    flatData.forEach(item => Object.keys(item).forEach(k => allKeys.add(k)));
+    const keys = Array.from(allKeys);
+
+    const csv = toCSV(flatData, keys);
+    const blob = new Blob([csv], {type: 'text/csv'});
+    const url = URL.createObjectURL(blob);
+
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'labjs_output.csv';
+    a.click();
+    URL.revokeObjectURL(url);
+  });
 </script>
 </body>
 </html>
