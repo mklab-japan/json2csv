@@ -80,7 +80,8 @@
     const keys = Array.from(allKeys);
 
     const csv = toCSV(flatData, keys);
-    const blob = new Blob([csv], {type: 'text/csv'});
+    const bom = new Uint8Array([0xEF, 0xBB, 0xBF]);  // UTF-8 BOM
+    const blob = new Blob([bom, csv], { type: 'text/csv;charset=utf-8' });
     const url = URL.createObjectURL(blob);
 
     const a = document.createElement('a');
